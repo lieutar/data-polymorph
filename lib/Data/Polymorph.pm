@@ -64,43 +64,61 @@ our $VERSION = '0.01';
 If this value is true, the object uses "UNIVERSAL-can" 
 when the method is not defined.
 
-=item C<methods>
+=item C<class_methods>
 
 The dictionary of class methods.
 
-=item C<special>
+=item C<type_methods>
 
 The dictionary of type methods.
 
 =back
 
+=head1 METHODS
+
+=over 4
+
+=item C<new>
+
+  $poly = Data::Polymorph->new();
+  $poly = Data::Polymorph->new( runs_native => 0 ); 
+  $poly = Data::Polymorph->new( runs_native => 1 ); 
+
+Constructs and returns a new object of this class.
+
 =cut
+
 
 
 {
   my @Template =
     (
-     [ methods => sub{{}} ],
-     [ special => sub{
+     [ class_methods => sub{{}} ],
+     [ type_methods => sub{
          return
            [
-            [Undef     => sub{ !defined( $_[1] );            },{}],
-            [Object    => sub{ blessed $_[1] and 1           },{}],
-            [ScalarRef => sub{ isa( $_[1], 'SCALAR' )        },{}],
-            [CodeRef   => sub{ isa( $_[1], 'CODE' )          },{}],
-            [ArrayRef  => sub{ isa( $_[1], 'ARRAY' )         },{}],
-            [HashRef   => sub{ isa( $_[1], 'HASH' )          },{}],
-            [GlobRef   => sub{ isa( $_[1], 'GLOB' )          },{}],
-            [RefRef    => sub{ isa( $_[1], 'REF' )           },{}],
-            [Ref       => sub{ ref( $_[1] ) and 1            },{}],
-            [Num       => sub{ looks_like_number( $_[1] )    },{}],
-            [Glob      => sub{ isa(\$_[1],'GLOB' )           },{}],
-            [Str       => sub{ isa(\$_[1],'SCALAR');         },{}],
-            [Value     => sub{ 1                             },{}],
-            [Defined   => sub{ 1                             },{}],
-            [Any       => sub{ 1                             },{}],
+            [Undef     => sub{ !defined( $_[1] );         },{},'Any'],
+            [ScalarRef => sub{ isa( $_[1], 'SCALAR' )     },{},'Ref'],
+            [CodeRef   => sub{ isa( $_[1], 'CODE' )       },{},'Ref'],
+            [ArrayRef  => sub{ isa( $_[1], 'ARRAY' )      },{},'Ref'],
+            [HashRef   => sub{ isa( $_[1], 'HASH' )       },{},'Ref'],
+            [GlobRef   => sub{ isa( $_[1], 'GLOB' )       },{},'Ref'],
+            [RefRef    => sub{ isa( $_[1], 'REF' )        },{},'Ref'],
+            [Ref       => sub{ ref( $_[1] ) and 1         },{},'Defined'],
+            [Num       => sub{ looks_like_number( $_[1] ) },{},'Value'],
+            [Glob      => sub{ isa(\$_[1],'GLOB' )        },{},'Value'],
+            [Str       => sub{ isa(\$_[1],'SCALAR');      },{},'Value'],
+            [Value     => sub{ 1                          },{},'Defined'],
+            [Defined   => sub{ 1                          },{},'Any'],
+            [Any       => sub{ 1                          },{},undef],
            ]
          }],
+
+     [ dic => sub{
+         my $self = shift;
+         return {  map{ ($_->[0] ,  $_)} @{$self->type_methods}   };
+       }],
+
      [ runs_native     => sub{0} ],
      );
 
@@ -128,23 +146,13 @@ The dictionary of type methods.
   }
 }
 
-=head1 METHODS
 
-=over 4
-
-=item C<new>
-
-  $poly = Data::Polymorph->new();
-  $poly = Data::Polymorph->new( runs_native => 0 ); 
-  $poly = Data::Polymorph->new( runs_native => 1 ); 
-
-Constructs and returns a new object of this class.
 
 =item C<type>
 
   $type = $poly->type( 123  ); # returns 'Num'
 
-Returns type name of given data. Types are below.
+Returns the type name of the given object. Types are below.
 
   Any
     Undef
@@ -154,27 +162,66 @@ Returns type name of given data. Types are below.
         Str
         Glob
       Ref
-        Object
         ScalarRef
         HashRef
         ArrayRef
         CodeRef
+        RefRef
 
 They seem like L<Moose> Types.
 
 Actually, I designed these types based on the man pages from 
-L<Moose::Util::TypeConstraints>. Though they don't depend on L<Moose>, 
-as optional features, 
-I intend to make them compatible with actual L<Moose>-types
+L<Moose::Util::TypeConstraints>.
+Though they never relate with L<Moose>-types.
+Because L<Moose> types are designed for constraint. But they are not.
 
-But, at this time, they are not implemented.
 
 =item C<is_type>
 
   $poly->is_type('Any') ; # => 1
   $poly->is_type('Str') ; # => 1
-  $poly->is_type('Object') ; # => 1
   $poly->is_type('UNIVERSAL') ; # => 0
+
+Returns true if given name is a defined type name. Otherwise,
+returns false.
+
+=item C<super_type>
+
+  $type = $poly->super_type('Str');   # => Value
+  $type = $poly->super_type('Undef'); # => Any
+
+Returns name of the type which is the super type of the given type name.
+
+=item C<class>
+
+  $type = $poly->class( $obj );
+
+Returns class name or type name of the given object.
+
+=cut
+
+sub type {
+  my ( $self, $obj ) = @_;
+  foreach my $slot ( @{$self->type_methods} ) {
+    return $slot->[0] if $slot->[1]->($self, $obj) ;
+  }
+}
+
+sub is_type {
+  my ($self, $type) = @_;
+  (exists $self->dic->{$type}) ? 1 : 0;
+}
+
+sub super_type {
+  my ($self, $type) = @_;
+  confess "$type is not type" unless $self->is_type( $type );
+  ($self->dic->{$type} || [])->[3];
+}
+
+sub class {
+  my ( $self, $obj ) = @_;
+  blessed( $obj ) or $self->type( $obj );
+}
 
 =item C<define_type_method>
 
@@ -201,30 +248,199 @@ by this object of this class.
 
 Defines a new method for a type or a class.
 
-=item C<method>
+=cut
 
-  $meth = $poly->method( 'A::Class' => 'method' );
+sub define_type_method {
+  my ( $self, $class, $method , $code ) = @_;
+  foreach my $slot ( @{$self->type_methods}) {
+    next unless $slot->[0] eq $class;
+    return $slot->[2]->{$method} = $code;
+  }
+  confess "unknown type: $class";
+}
+
+sub define_class_method {
+  my ( $self, $class, $method , $code ) = @_;
+  my $slot = ($self->class_methods->{$method} ||= []);
+  my $i = 0;
+  for(; $i < scalar @$slot ; $i++){
+    my $klass = $slot->[$i]->[0];
+
+    if( $klass eq $class ){
+      $slot->[$i]->[1] = $code;
+      return;
+    }
+
+    last if isa $class => $klass;
+  }
+  splice @$slot, $i, 0, [$class => $code];
+}
+
+sub define {
+  my ( $self, $class, $method, $code ) = @_;
+  goto ( $self->is_type( $class )
+         ? \&define_type_method
+         : \&define_class_method );
+}
+
+
+=item C<type_method>
+
+  $meth = $poly->type_method( 'ArrayRef' => 'values' );
+
+Returns applicable method to invoke by non object value.
+
+=item C<super_type_method>
+
+  $meth = $poly->super_type_method( 'ArrayRef' => 'values' );
+
+=cut
+
+sub type_method {
+  my ( $self, $type, $method ) = @_;
+  confess "$type is not registered" unless $self->is_type( $type );
+  while ( $type ){
+    my $slot = $self->dic->{$type};
+    my $code = $slot->[2]->{$method};
+    return $code if $code;
+    $type = $slot->[3];
+  }
+  undef;
+}
+
+sub super_type_method {
+  my ($self, $type, $method ) = @_;
+  confess "$type is not registered" unless $self->is_type( $type );
+  my $count = 0;
+  for (my $slot; $type ; $type = $slot->[3] ){
+    $slot = $self->dic->{$type};
+    my $code = $slot->[2]->{$method};
+    next unless $code;
+    return $code if $count;
+    $count++;
+  }
+  undef;
+}
+
+=item C<class_method>
+
+  $meth = $poly->class_method( 'A::Class' => 'method' );
   ($poly->apply( 'A::Class' => $method ) or
    sub{ confess "method $method is not defined" } )->( $args .... );
 
 Returns applicable method to invoke by an object of the class.
 
-=item C<super_method>
+=item C<super_class_method>
 
-  $super = $poly->super_method( 'A::Class' => 'method' );
+  $super = $poly->super_class_method( 'A::Class' => 'method' );
   ($poly->apply( 'A::Class' => $method ) or
    sub{ confess "method $method is not defined" } )->( $args .... );
 
 Returns applicable method to invoke as super method
 by an object of the object.
 
-=item C<type_method>
+=cut
 
-  $meth = $poly->type_method( ArrayRef => 'values' );
+sub class_method {
+  my ( $self, $class, $method ) = @_;
+  my $slot = ($self->class_methods->{$method} ||= []);
+  foreach my $meth ( @$slot ){
+    next unless isa( $class, $meth->[0] );
+    return $meth->[1];
+  }
+}
 
-Returns applicable method to invoke by non object value.
+sub super_class_method {
+  my ( $self, $class, $method ) = @_;
+  my $slot  = ($self->class_methods->{$method} ||= []);
+  my $count = 0;
+  foreach my $meth ( @$slot ){
+    next unless isa( $class, $meth->[0] );
+    return $meth->[1] if $count;
+    $count++;
+  }
+}
 
-Returns the type name of the given object.
+=item C<method>
+
+  $code = $poly->method( []              => 'values' );
+  $code = $poly->method( qr{foo}         => 'values' );
+  $code = $poly->method( FileHandle->new => 'values' );
+
+Returns applicable method to invoke by the given object.
+
+=item C<super_method>
+
+  $code = $poly->super_method( []              => 'values' );
+  $code = $poly->super_method( qr{foo}         => 'values' );
+  $code = $poly->super_method( FileHandle->new => 'values' );
+  $code = $poly->super_method( 'Any' => 'values' ); # always undef
+
+Returns applicable method to invoke as super method
+by the given object.
+
+=cut
+
+sub method {
+  my ( $self, $obj, $method ) = @_;
+  my $class = blessed( $obj );
+  my $type  = $self->type( $obj );
+  ($class
+   ? ( $self->class_method( $class, $method ) or
+       $self->type_method( $type, $method ) or
+       ( $self->runs_native and UNIVERSAL::can( $obj , $method ) ))
+   :  $self->type_method( $type, $method ));
+}
+
+sub _native_super {
+
+  my ( $class, $method ) = @_;
+  my $glob = do{ no strict 'refs'; \*{"$class::$method"} };
+  my @isa  = do{ no strict 'refs'; @{"${class}::ISA"} };
+
+  if( *{$glob}{CODE} ){
+    foreach my $parent ( @isa ){
+      my $code = UNIVERSAL::can( $parent, $method );
+      return $code if $code;
+    }
+  }
+  else {
+    foreach my $parent ( @isa ){
+      my $code = _native_super( $parent, $method );
+      return $code if $code;
+    }
+  }
+}
+
+sub super_method {
+  my ( $self, $obj, $method ) = @_;
+  my $class  = blessed( $obj );
+  my $type   = $self->type( $obj );
+
+  if ( $class ){
+    my $uni = $self->class_method( UNIVERSAL => $method );
+    if( $class eq 'UNIVERSAL' ) {
+
+      return $self->type_method( $type => $method ) if $uni;
+
+    }
+    else {
+
+      my $code = $self->super_class_method( $class, $method );
+      return $code if $code;
+
+      if( $self->runs_native ) {
+        $code = _native_super( $class, $method );
+        return $code if $code;
+      }
+
+      return $self->type_method( $type => $method ) if $uni;
+    }
+  }
+
+  $self->super_type_method( $type => $method );
+}
+
 
 =item C<apply>
 
@@ -242,117 +458,30 @@ Invokes a external method of super class of the object.
 
 =cut
 
-sub is_type {
-  my ($self, $class) = @_;
-  foreach my $type ( @{$self->special} ) {
-    return 1 if $type->[0] eq $class;
-  }
-  0
-}
-
-sub define {
-  my ( $self, $class, $method, $code ) = @_;
-  goto ( $self->is_type( $class )
-         ? \&define_type_method
-         : \&define_class_method );
-}
-
-sub define_class_method {
-  my ( $self, $class, $method , $code ) = @_;
-  my $slot = ($self->methods->{$method} ||= []);
-  my $i = 0;
-  for(; $i < scalar @$slot ; $i++){
-    my $klass = $slot->[$i]->[0];
-
-    if( $klass eq $class ){
-      $slot->[$i]->[1] = $code;
-      return;
-    }
-
-    last if isa $class => $klass;
-  }
-  splice @$slot, $i, 0, [$class => $code];
-}
-
-sub define_type_method {
-  my ( $self, $class, $method , $code ) = @_;
-  foreach my $slot ( @{$self->special}) {
-    next unless $slot->[0] eq $class;
-    return $slot->[2]->{$method} = $code;
-  }
-  confess "unknown special class: $class";
-}
-
-sub type {
-  my ( $self, $obj, $meth ) = @_;
-  foreach my $slot ( @{$self->special} ) {
-    return $slot->[0] if $slot->[1]->($self, $obj) ;
-  }
-}
-
-sub type_method {
-  my ( $self, $obj, $meth ) = @_;
-  foreach my $slot ( @{$self->special} ) {
-    return $slot->[2]->{$meth} if ( $slot->[1]->($self, $obj) and
-                                    exists $slot->[2]->{$meth} );
-  }
-}
-
-sub method {
-  my ( $self, $class, $method, $super ) = @_;
-  my $slot = ($self->methods->{$method} ||= []);
-  foreach my $meth ( @$slot ){
-    next unless  isa( $class, $meth->[0] );
-    next if $super && $class eq $meth->[0];
-    return $meth->[1];
-  }
-}
-
-sub super_method { $_[0]->method(@_[1,2],1); }
 
 sub apply {
   my $self   = shift;
   my $obj    = $_[0];
   my $method = splice @_, 1, 1;
-  my $class  = blessed( $obj );
-  my $code   = ($class
-                ?( $self->method( $class, $method ) or
-                   $self->type_method( $obj, $method ) or
-                   UNIVERSAL::can( $obj , $method ) )
-                :  $self->type_method( $obj, $method ));
-
-  confess sprintf('method "%s" is not defined in %s',
-                  $method,
-                  $class || $self->type($obj)) unless $code;
-  goto $code;
+  goto (  $self->method( $obj => $method ) or
+          sub{ confess sprintf( 'method "%s" is not defined in %s',
+                                $method,
+                                $self->class($obj)) });
 }
 
 sub super {
   my $self   = shift;
   my $obj    = $_[0];
   my $method = splice @_, 1, 1;
-  my $class  = blessed( $obj );
-  my $code   = ( $class and $class eq 'UNIVERSAL'
-                 ? $self->type_method( $obj )
-                 : $self->super_method( $class, $method ) );
-
-  if( !$code && $self->runs_native ){
-    foreach my $parent ( do{ no strict 'refs'; @{"${class}::ISA"} } ){
-      $code = UNIVERSAL::can( $parent, $method );
-      last if $code;
-    }
-  }
-
-  confess sprintf('method "%s" is not defined in %s',
-                  $method,
-                   $class || $self->type($obj)) unless $code;
-  goto $code;
+  goto (  $self->super_method( $obj => $method ) or
+          sub{ confess sprintf( 'method "SUPER::%s" is not defined in %s',
+                                $method,
+                                $self->class($obj)) });
 }
 
 1; # End of Data::Polymorph
 
 __END__
-
 
 =head1 AUTHOR
 
