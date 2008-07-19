@@ -114,7 +114,7 @@ Constructs and returns a new object of this class.
            ]
          }],
 
-     [ dic => sub{
+     [ _dic => sub{
          my $self = shift;
          return {  map{ ($_->[0] ,  $_)} @{$self->type_methods}   };
        }],
@@ -209,13 +209,13 @@ sub type {
 
 sub is_type {
   my ($self, $type) = @_;
-  (exists $self->dic->{$type}) ? 1 : 0;
+  (exists $self->_dic->{$type}) ? 1 : 0;
 }
 
 sub super_type {
   my ($self, $type) = @_;
   confess "$type is not type" unless $self->is_type( $type );
-  ($self->dic->{$type} || [])->[3];
+  ($self->_dic->{$type} || [])->[3];
 }
 
 sub class {
@@ -300,7 +300,7 @@ sub type_method {
   my ( $self, $type, $method ) = @_;
   confess "$type is not registered" unless $self->is_type( $type );
   while ( $type ){
-    my $slot = $self->dic->{$type};
+    my $slot = $self->_dic->{$type};
     my $code = $slot->[2]->{$method};
     return $code if $code;
     $type = $slot->[3];
@@ -313,7 +313,7 @@ sub super_type_method {
   confess "$type is not registered" unless $self->is_type( $type );
   my $count = 0;
   for (my $slot; $type ; $type = $slot->[3] ){
-    $slot = $self->dic->{$type};
+    $slot = $self->_dic->{$type};
     my $code = $slot->[2]->{$method};
     next unless $code;
     return $code if $count;
