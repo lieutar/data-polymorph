@@ -1,7 +1,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 47;
+use Test::More tests => 48;
 require Data::Polymorph;
 
 {
@@ -108,4 +108,6 @@ is( $p00->super($_->[0] => foo => ) ,
 
 my $p01 = Data::Polymorph->new;
 $p01->define( Any => foo => sub{'Any'} );
+$p01->define( Glob => bar => sub{'Glob'} );
 is( $p01->apply( bless({}, 'A') => foo => ) , 'Any', 'over UNIVERSAL' );
+is( $p01->apply( *STDIN => bar =>), "Glob" , 'Glob');
