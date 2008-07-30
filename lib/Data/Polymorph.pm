@@ -46,6 +46,14 @@ our $VERSION = '0.01';
   ## returns "do{ requier Symbol; bless Symbol::gensym(), 'FileHandle'}"
   $poly->apply( FileHandle->new , 'freeze' );
 
+=head1 DESCRIPTION
+
+This module provides gentle way of polymorphic behaviors definition 
+for special cases that aren't original concerns.
+
+Applying this solution dissipates necessity for making an original
+namespace dirty.
+
 =head1 ATTRIBUTES
 
 =over 4
@@ -214,7 +222,7 @@ sub is_type {
 
 sub super_type {
   my ($self, $type) = @_;
-  confess "$type is not type" unless $self->is_type( $type );
+  confess "$type is not a type" unless $self->is_type( $type );
   ($self->_dic->{$type} || [])->[3];
 }
 
@@ -229,8 +237,7 @@ sub class {
   $poly->define_type_method('HashRef'  => 'values' => sub{ values %$_[0]});
   $poly->define_type_method('Any'      => 'values' => sub{ $_[0] });
 
-Defines a new method for the given type. Types that are able to use to this
-is below.
+Defines a method for the given type.
 
 =item C<define_class_method>
 
@@ -238,7 +245,7 @@ is below.
     #                    code reference
   }  );
 
-Defines a new external method of the given class which is applyable 
+Defines an external method of the given class which is applyable 
 by this object of this class.
 
 =item C<define>
@@ -246,7 +253,7 @@ by this object of this class.
   $poly->define('Class::Name' => 'method' => sub{ ... } );
   $poly->define('Undef'       => 'method' => sub{ ... } );
 
-Defines a new method for a type or a class.
+Defines a method for a type or a class.
 
 =cut
 
@@ -288,17 +295,19 @@ sub define {
 
   $meth = $poly->type_method( 'ArrayRef' => 'values' );
 
-Returns applicable method to invoke by non object value.
+Returns a CODE reference which is invoked as the method of given type.
 
 =item C<super_type_method>
 
   $meth = $poly->super_type_method( 'ArrayRef' => 'values' );
 
+Returns a CODE reference which is invoked as the super method of given type.
+
 =cut
 
 sub type_method {
   my ( $self, $type, $method ) = @_;
-  confess "$type is not registered" unless $self->is_type( $type );
+  confess "$type is not a type" unless $self->is_type( $type );
   while ( $type ){
     my $slot = $self->_dic->{$type};
     my $code = $slot->[2]->{$method};
@@ -310,7 +319,7 @@ sub type_method {
 
 sub super_type_method {
   my ($self, $type, $method ) = @_;
-  confess "$type is not registered" unless $self->is_type( $type );
+  confess "$type is not a type" unless $self->is_type( $type );
   my $count = 0;
   for (my $slot; $type ; $type = $slot->[3] ){
     $slot = $self->_dic->{$type};
@@ -328,7 +337,7 @@ sub super_type_method {
   ($poly->apply( 'A::Class' => $method ) or
    sub{ confess "method $method is not defined" } )->( $args .... );
 
-Returns applicable method to invoke by an object of the class.
+Returns a CODE reference which is invoked as the method of given class.
 
 =item C<super_class_method>
 
@@ -336,8 +345,7 @@ Returns applicable method to invoke by an object of the class.
   ($poly->apply( 'A::Class' => $method ) or
    sub{ confess "method $method is not defined" } )->( $args .... );
 
-Returns applicable method to invoke as super method
-by an object of the object.
+Returns a CODE reference which is invoked as the super method of given class.
 
 =cut
 
@@ -367,7 +375,7 @@ sub super_class_method {
   $code = $poly->method( qr{foo}         => 'values' );
   $code = $poly->method( FileHandle->new => 'values' );
 
-Returns applicable method to invoke by the given object.
+Returns a CODE reference which is invoked as the method of given object.
 
 =item C<super_method>
 
@@ -376,8 +384,7 @@ Returns applicable method to invoke by the given object.
   $code = $poly->super_method( FileHandle->new => 'values' );
   $code = $poly->super_method( 'Any' => 'values' ); # always undef
 
-Returns applicable method to invoke as super method
-by the given object.
+Returns a CODE reference which is invoked as the super method of given object.
 
 =cut
 
@@ -446,13 +453,13 @@ sub super_method {
 
   $poly->apply( $obj => 'method' => $arg1, $arg1 , $arg3 .... );
 
-Invokes an external method which was defined.
+Invokes a method which was defined.
 
 =item C<super>
 
   $poly->super( $obj => 'method' => $arg1, $arg1 , $arg3 .... );
 
-Invokes a external method of super class of the object.
+Invokes a super method which was defined..
 
 =back
 
